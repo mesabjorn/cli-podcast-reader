@@ -3,29 +3,20 @@ import webbrowser
 
 from podcasts import PodcastReader
 
-MAX_AGE = 14 # episodes older than MAX_AGE days, are hidden
+MAX_AGE = 30 # episodes older than MAX_AGE days, are hidden
     
 def select_cast(podcasts):
-    command = None
-    
+    command = None    
     while command != "q":
         print("Select cast: (q to quit)")
         for i,p in enumerate(podcasts):
-            print(f"{i}. {p}")
+            print(f"{i+1}. {p}")
         selected_cast = input("")
         try:
             if selected_cast == "q": break
-            print("Select episode: (b to go back)")
-            podcasts[int(selected_cast)].list_last()
-            selected_ep = input("")
-            if selected_ep == "b":
-                pass
-            else:
-                toplay = podcasts[int(selected_cast)].episodes[int(selected_ep)]
-                print(f"Opening {toplay.link}")
-                webbrowser.open(toplay.link)                
-        except:
-            print("Invalid command")
+            select_eps([podcasts[int(selected_cast)-1]])
+        except Exception as e:
+            print(f"Invalid command: {e}.")
 
 def select_eps(podcasts):
     all_eps = []
@@ -49,6 +40,14 @@ def select_eps(podcasts):
 if __name__ == "__main__":
     feeds = sys.argv[1] if len(sys.argv)>1 else "feeds.txt"
     pr = PodcastReader(feeds, max_age=MAX_AGE)
-
-    # select_cast(podcasts)
-    select_eps(pr.podcasts)
+    while True:
+        choice = input("1. List episodes, 2. browse podcast (q to quit).\n")
+        try:
+            choice = int(choice)
+        except Exception as e:
+            print("Invalid command.")
+            sys.exit()
+        if choice == 1:
+            select_eps(pr.podcasts)
+        elif choice == 2:
+            select_cast(pr.podcasts)
