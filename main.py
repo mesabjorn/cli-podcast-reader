@@ -1,3 +1,4 @@
+import sys
 import os
 import re
 import webbrowser
@@ -38,7 +39,6 @@ def get_podcasts(rssdata)->list[Podcast]:
                 f.write(f"{e}\n")
                 f.write(xml_data)
     return result
-
 
 def get_field(item,fieldname,default=""):
     field = item.find(fieldname)
@@ -111,7 +111,8 @@ def select_eps(podcasts):
         webbrowser.open(toplay.link)
 
 if __name__ == "__main__":
-    urls = read_feeds_file("feeds.txt")
+    feeds = sys.argv[1] if len(sys.argv)>1 else "feeds.txt"
+    urls = read_feeds_file(feeds)
     podcasts = get_podcasts(urls)
     # [print(p) for p in podcasts]
     # select_cast(podcasts)
