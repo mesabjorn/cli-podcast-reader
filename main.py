@@ -1,5 +1,4 @@
 import os
-from dataclasses import dataclass,field
 import re
 import webbrowser
 import datetime
@@ -9,55 +8,9 @@ import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element
 import pytz
 
-MAX_AGE = 30 # episodes older than MAX_AGE days, are hidden
+from podcasts import Podcast,Episode
 
-dateformats = [
-    "%a, %d %b %Y %H:%M:%S %z",
-    "%a, %d %b %Y %H:%M:%S %Z",
-]
-
-@dataclass
-class Episode:
-    title:str = "" 
-    date:str = ""
-    description:str = ""
-    link:str = ""
-    channel:str=""
-
-    def __post_init__(self):
-        question_mark_idx = self.link.find("?")
-        if question_mark_idx>-1:
-            self.link=self.link[0:question_mark_idx]
-        
-        if self.date.find("PDT")>-1 or self.date.find("PST")>-1:
-            self.date = self.date.replace("PDT","-0700")
-            self.date = self.date.replace("PST","-0700")
-
-        for f in dateformats:
-            try:
-                self.date = datetime.datetime.strptime(self.date,f)
-                if not isinstance(self.date.tzinfo,datetime.timezone):
-                    self.date = pytz.utc.localize(self.date)
-                break
-            except Exception as e:
-                pass
-
-
-    def __str__(self):
-        return f"{datetime.datetime.strftime(self.date,'%d-%b-%Y %H:%M')}. {self.channel}: {self.title}"
-
-@dataclass
-class Podcast:
-    title:str
-    episodes:list
-
-    def __str__(self):
-        return f"{self.title}; {len(self.episodes)} episode(s)."
-    
-
-    def list_last(self, n=5):
-        for i in range(n):
-            print(f"{i} {self.episodes[i]}")
+MAX_AGE = 14 # episodes older than MAX_AGE days, are hidden
 
 def download_xml(url)->str|None:
     r =  requests.get(url)
@@ -87,25 +40,34 @@ def get_podcasts(rssdata)->list[Podcast]:
     return result
 
 
+def get_field(item,fieldname,default=""):
+    field = item.find(fieldname)
+    return field.text if field else default
+
+def read_episodes(items, channel):
+    episodes = []
+    cutoff = datetime.datetime.now(pytz.timezone('Europe/Amsterdam'))-datetime.timedelta(days=MAX_AGE)
+
+    for item in items:
+        title = item.find("title").text
+        date = item.find("pubDate").text
+        url = item.find("enclosure").attrib["url"]
+        description = get_field(item,"description")
+        author = get_field(item,"author")
+        episode = Episode(title,date,url,channel,description,author)
+        if episode.date < cutoff: break
+        episodes.append(episode)
+    return episodes
+
 def read_xml_data(xmldata)->Podcast:
     data = ET.fromstring(xmldata)
     channel = data.find("channel")
     channel_title  = channel.find("title").text
-    items = channel.findall("item")
+    channel_description = channel.find("description").text
+    channel_url = channel.find("link").text
 
-    episodes = []
-    cutoff = datetime.datetime.now(pytz.timezone('Europe/Amsterdam'))-datetime.timedelta(days=MAX_AGE)
-    for item in items:        
-        title = item.find("title").text
-        description = item.find("description").text
-        date = item.find("pubDate").text
-        url = item.find("enclosure").attrib["url"]
-        
-        episode = Episode(title,date,description,url,channel=channel_title)
-        if episode.date < cutoff:
-            break
-        episodes.append(episode)
-    return Podcast(channel_title,episodes)
+    episodes = read_episodes(channel.findall("item"),channel_title)
+    return Podcast(channel_title,episodes,channel_description,channel_url)
 
 def select_cast(podcasts):
     command = None
@@ -129,7 +91,6 @@ def select_cast(podcasts):
         except:
             print("Invalid command")
 
-
 def select_eps(podcasts):
     all_eps = []
     for p in podcasts:
@@ -150,7 +111,7 @@ def select_eps(podcasts):
         webbrowser.open(toplay.link)
 
 if __name__ == "__main__":
-    urls = read_feeds_file("feeds - Copy.txt")
+    urls = read_feeds_file("feeds.txt")
     podcasts = get_podcasts(urls)
     # [print(p) for p in podcasts]
     # select_cast(podcasts)
