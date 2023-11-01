@@ -1,74 +1,10 @@
 import sys
-import os
-import re
 import webbrowser
-import datetime
 
-import requests
-import xml.etree.ElementTree as ET
-from xml.etree.ElementTree import Element
-import pytz
-
-from podcasts import Podcast,Episode
+from podcasts import PodcastReader
 
 MAX_AGE = 14 # episodes older than MAX_AGE days, are hidden
-
-def download_xml(url)->str|None:
-    r =  requests.get(url)
-    if(r.status_code == 200):
-        return r.content.decode()
-    return None
-
-def read_feeds_file(feeds_file="feeds.txt")->list[str]:
-    with open(feeds_file) as f:
-        lines = filter(lambda x: not x.startswith("#"), f.readlines())
-        return [line.split(";")[1].strip() for line in lines]
-
-def get_podcasts(rssdata)->list[Podcast]:
-    result = []
-    for url in rssdata:
-        try:
-            xml_data = download_xml(url)
-            podcast = read_xml_data(xml_data)
-            result.append(podcast)
-        except Exception as e:
-            clean_feed = re.sub(r"[\/\\:\-\.=?]","",url)
-            print(f"Error obtaining podcast: '{url}'. Dumping contents to './dump/{clean_feed}'.")
-            os.makedirs("./dump",exist_ok=True)
-            with open(f"./dump/{clean_feed}.txt","w",encoding="utf16") as f:
-                f.write(f"{e}\n")
-                f.write(xml_data)
-    return result
-
-def get_field(item,fieldname,default=""):
-    field = item.find(fieldname)
-    return field.text if field else default
-
-def read_episodes(items, channel):
-    episodes = []
-    cutoff = datetime.datetime.now(pytz.timezone('Europe/Amsterdam'))-datetime.timedelta(days=MAX_AGE)
-
-    for item in items:
-        title = item.find("title").text
-        date = item.find("pubDate").text
-        url = item.find("enclosure").attrib["url"]
-        description = get_field(item,"description")
-        author = get_field(item,"author")
-        episode = Episode(title,date,url,channel,description,author)
-        if episode.date < cutoff: break
-        episodes.append(episode)
-    return episodes
-
-def read_xml_data(xmldata)->Podcast:
-    data = ET.fromstring(xmldata)
-    channel = data.find("channel")
-    channel_title  = channel.find("title").text
-    channel_description = channel.find("description").text
-    channel_url = channel.find("link").text
-
-    episodes = read_episodes(channel.findall("item"),channel_title)
-    return Podcast(channel_title,episodes,channel_description,channel_url)
-
+    
 def select_cast(podcasts):
     command = None
     
@@ -112,8 +48,7 @@ def select_eps(podcasts):
 
 if __name__ == "__main__":
     feeds = sys.argv[1] if len(sys.argv)>1 else "feeds.txt"
-    urls = read_feeds_file(feeds)
-    podcasts = get_podcasts(urls)
-    # [print(p) for p in podcasts]
+    pr = PodcastReader(feeds, max_age=MAX_AGE)
+
     # select_cast(podcasts)
-    select_eps(podcasts)
+    select_eps(pr.podcasts)
