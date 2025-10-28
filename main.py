@@ -10,7 +10,7 @@ from app.podcasts import Podcast, PodcastReader
 from app import LOGGER
 
 
-def select_cast(podcasts, max_age=30):
+def select_cast(podcasts):
     command = None
     while command not in ["q", "quit", "exit"]:
         print("Select cast: (q to quit)")
@@ -20,12 +20,12 @@ def select_cast(podcasts, max_age=30):
         try:
             if selected_cast == "q":
                 break
-            select_eps([podcasts[int(selected_cast) - 1]], max_age=max_age)
+            select_eps([podcasts[int(selected_cast) - 1]])
         except Exception as e:
             LOGGER.error(f"Invalid command: {e}.")
 
 
-def select_eps(podcasts: list[Podcast], max_age):
+def select_eps(podcasts: list[Podcast]):
     all_eps = []
     for p in podcasts:
         all_eps.extend(p.episodes)
@@ -33,9 +33,6 @@ def select_eps(podcasts: list[Podcast], max_age):
     all_eps.sort(key=lambda x: x.date, reverse=True)
 
     while command not in ["q", "quit", "exit"]:
-        LOGGER.info(
-            f"Hiding {len(all_eps) - len(all_eps)} episode(s) aired over {max_age} days ago."
-        )
         for i, ep in enumerate(all_eps):
             print(f"{i + 1}. {ep}")
         selected_ep = input("Episode nr to open (q to quit): ")
@@ -73,9 +70,9 @@ def main():
         except ValueError:
             LOGGER.error("Invalid command.")
         if choice == 1:
-            select_eps(pr.podcasts, max_age=max_age)
+            select_eps(pr.podcasts)
         elif choice == 2:
-            select_cast(pr.podcasts, max_age=max_age)
+            select_cast(pr.podcasts)
         elif choice == 3:
             name = input("Name: ")
             url = input("Url: ")

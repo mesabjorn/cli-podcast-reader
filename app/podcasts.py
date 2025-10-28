@@ -1,4 +1,6 @@
+import hashlib
 import os
+from pathlib import Path
 import re
 from dataclasses import dataclass
 import datetime
@@ -8,7 +10,7 @@ import requests
 import xml.etree.ElementTree as ET
 import pytz
 
-from app import LOGGER
+from app import LOGGER, CacheManager
 
 dateformats = [
     "%a, %d %b %Y %H:%M:%S %z",
@@ -64,10 +66,13 @@ class Line:
 
 
 class PodcastReader:
-    def __init__(self, feedsfile: str, max_age=30):
+    cache: CacheManager
+
+    def __init__(self, feedsfile: str, max_age=30, cache_path=Path(".cache")):
         self.max_age = max_age
         self.feedsfile = feedsfile
         self.podcasts = []
+        self.cache = CacheManager.CacheManager(cache_path)
         self.read_feeds()
 
     def read_feeds(self):
@@ -87,7 +92,8 @@ class PodcastReader:
         for entry in entries:
             try:
                 LOGGER.info(f"Getting eps for '{entry.name}' ({entry.url}).")
-                xml_data = self.download_xml(entry.url)
+
+                xml_data = self.get_xml_data(entry.url)
                 podcast = self.read_xml_data(xml_data)
                 results.append(podcast)
             except Exception as e:
@@ -114,7 +120,23 @@ class PodcastReader:
         episodes = self.read_episodes(channel.findall("item"), channel_title)
         return Podcast(channel_title, episodes, channel_description, channel_url)
 
-    def download_xml(self, url) -> str | None:
+    def get_xml_data(self, url: str) -> bytes:
+        filename = hashlib.sha256(bytes(url, encoding="utf-8")).hexdigest()
+        cached_data = self.cache.read(filename)
+        if cached_data:
+            LOGGER.info(f"Got episode data from cachefile '{filename}'.")
+            return cached_data.data.decode()
+
+        content = self.download_xml(url)
+        content = None
+        if content:
+            self.cache.write(filename, content)
+            LOGGER.info(f"Cached episode data in '{filename}'.")
+            return content.decode()
+        LOGGER.warning(f"No data obtained for url '{url}'.")
+        return bytes()
+
+    def download_xml(self, url) -> bytes | None:
         r = requests.get(
             url,
             headers={
@@ -122,9 +144,7 @@ class PodcastReader:
             },
         )
         if r.status_code == 200:
-            return r.content.decode()
-        if len(r.content) > 0:
-            return r.content.decode()
+            return r.content
         return None
 
     def get_field(self, item, fieldname, default=""):
