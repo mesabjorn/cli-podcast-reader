@@ -42,11 +42,31 @@ class Episode:
     def __str__(self):
         return f"{datetime.datetime.strftime(self.date, '%d-%b-%Y %H:%M')}. {self.channel}: {self.title}"
 
+    def download(self, to: Path) -> Path:
+        to.mkdir(exist_ok=True, parents=True)
+
+        r = requests.get(
+            self.link,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36"
+            },
+        )
+        if r.status_code == 200:
+            safe_title = re.sub(r"[!@#$%^&*?|:\\/]", "", self.title)
+            file_out = (to / safe_title).with_suffix(".mp3")
+            with file_out.open("wb") as f:
+                f.write(r.content)
+            return file_out
+
+        raise Exception(
+            f"Error while dowloading {self.title}: ({self.link}). Error: '{r.status_code}':{r.content}"
+        )
+
 
 @dataclass
 class Podcast:
     title: str
-    episodes: list
+    episodes: list[Episode]
     description: str = ""
     link: str = ""
 
@@ -76,16 +96,19 @@ class PodcastReader:
         self.read_feeds()
 
     def read_feeds(self):
+        linedata = []
         with open(self.feedsfile) as f:
             lines = filter(
                 lambda x: not x.startswith("#") and len(x) > 1, f.readlines()
             )
-            linedata = []
             for line in lines:
                 data = [x.strip() for x in line.split(";")]
                 linedata.append(Line(name=data[0], url=data[1]))
+        if len(linedata) == 0:
+            print("Warning: no podcasts in feeds file")
+            return
 
-            self.parse_rssdata(linedata)
+        self.parse_rssdata(linedata)
 
     def parse_rssdata(self, entries: list[Line]):
         results = []
@@ -128,7 +151,6 @@ class PodcastReader:
             return cached_data.data.decode()
 
         content = self.download_xml(url)
-        content = None
         if content:
             self.cache.write(filename, content)
             LOGGER.info(f"Cached episode data in '{filename}'.")
