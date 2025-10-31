@@ -44,6 +44,10 @@ class Episode:
 
     def download(self, to: Path) -> Path:
         to.mkdir(exist_ok=True, parents=True)
+        safe_title = re.sub(r"[!@#$%^&*?|:\\/]", "", self.title)
+        file_out = (to / safe_title).with_suffix(".mp3")
+        if file_out.exists():
+            return file_out
 
         r = requests.get(
             self.link,
@@ -52,8 +56,6 @@ class Episode:
             },
         )
         if r.status_code == 200:
-            safe_title = re.sub(r"[!@#$%^&*?|:\\/]", "", self.title)
-            file_out = (to / safe_title).with_suffix(".mp3")
             with file_out.open("wb") as f:
                 f.write(r.content)
             return file_out

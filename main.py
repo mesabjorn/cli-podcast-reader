@@ -1,5 +1,4 @@
 import argparse
-import sys
 import urllib
 import webbrowser
 from enum import Enum
