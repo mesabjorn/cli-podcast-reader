@@ -7,14 +7,20 @@ import webbrowser
 
 import urllib
 
+from app.exit_commands import EXIT_COMMANDS, exit_commands
 from app.podcasts import Episode, Podcast, PodcastReader
 
 from app import LOGGER
 
 
+class EPISODE_ACTION(Enum):
+    PLAY = 1
+    DOWNLOAD = 2
+
+
 def select_cast(podcasts):
     command = None
-    while command not in ["q", "quit", "exit"]:
+    while command not in EXIT_COMMANDS:
         print("Select cast: (q to quit)")
         for i, p in enumerate(podcasts):
             print(f"{i + 1}. {p}")
@@ -27,14 +33,6 @@ def select_cast(podcasts):
             LOGGER.error(f"Invalid command: {e}.")
 
 
-from enum import Enum
-
-
-class EPISODE_ACTION(Enum):
-    PLAY = 1
-    DOWNLOAD = 2
-
-
 def episode_action() -> EPISODE_ACTION | None:
     while True:
         act = (
@@ -42,13 +40,13 @@ def episode_action() -> EPISODE_ACTION | None:
                 "What do you want to do?\n"
                 "1. Play episode\n"
                 "2. Download episode\n"
-                "(q to quit): "
+                f"{exit_commands()}: "
             )
             .strip()
             .lower()
         )
 
-        if act in ["q", "quit", "exit"]:
+        if act in EXIT_COMMANDS:
             break
 
         if act == "1":
@@ -56,22 +54,22 @@ def episode_action() -> EPISODE_ACTION | None:
         elif act == "2":
             return EPISODE_ACTION.DOWNLOAD
         else:
-            print("Invalid option. Please enter 1, 2, or q.")
+            print("Invalid option.")
 
 
 def select_eps(podcasts: list[Podcast]):
     all_eps = []
     for p in podcasts:
         all_eps.extend(p.episodes)
-    command = None
+    selected_ep = None
     all_eps.sort(key=lambda x: x.date, reverse=True)
 
-    while command not in ["q", "quit", "exit"]:
+    while selected_ep not in EXIT_COMMANDS:
         for i, ep in enumerate(all_eps):
             print(f"{i + 1}. {ep}")
-        selected_ep = input("Episode nr to open (q to quit): ")
+        selected_ep = input(f"Episode nr to open {exit_commands()}: ")
 
-        if selected_ep == "q":
+        if selected_ep in EXIT_COMMANDS:
             break
 
         toplay: Episode = all_eps[int(selected_ep) - 1]
@@ -82,7 +80,7 @@ def select_eps(podcasts: list[Podcast]):
         elif a == EPISODE_ACTION.DOWNLOAD:
             LOGGER.info(f"Downloading {toplay.link}")
             downloaded_file = toplay.download(to=Path("./download/"))
-            LOGGER.info(f"downloaded episode to '{downloaded_file}'")
+            LOGGER.info(f"Downloaded episode to '{downloaded_file}'")
 
 
 def parse_args():
@@ -121,10 +119,10 @@ def main():
     pr = PodcastReader(args.feeds, max_age=max_age)
     while True:
         choice = input(
-            ">1. List episodes, \n>2. browse podcast \n>3. Add new podcast. \n>4. Find new cast on podbean.\nEnter q/quit/exit to stop\n"
+            f">1. List episodes, \n>2. browse podcast \n>3. Add new podcast. \n>4. Find new cast on podbean.\nEnter {exit_commands()} to stop\n"
         )
         try:
-            if choice in ["q", "quit", "exit"]:
+            if choice in EXIT_COMMANDS:
                 sys.exit()
             choice = int(choice)
         except ValueError:
