@@ -1,5 +1,5 @@
-EXIT_COMMANDS = ["q", "quit", "exit"]
+EXIT_COMMANDS = {"q", "quit", "exit"}
 
 
 def exit_commands():
-    return f"({', '.join(EXIT_COMMANDS)})"
+    return f"To exit type any of: {', '.join(EXIT_COMMANDS)}"

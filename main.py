@@ -1,16 +1,15 @@
 import argparse
-
+import sys
+import urllib
+import webbrowser
 from enum import Enum
 from pathlib import Path
-import sys
-import webbrowser
 
-import urllib
 
 from app.exit_commands import EXIT_COMMANDS, exit_commands
 from app.podcasts import Episode, Podcast, PodcastReader
-
 from app import LOGGER
+from app.user_input import await_user_input
 
 
 class EPISODE_ACTION(Enum):
@@ -18,81 +17,220 @@ class EPISODE_ACTION(Enum):
     DOWNLOAD = 2
 
 
-def select_cast(podcasts):
-    command = None
-    while command not in EXIT_COMMANDS:
-        print("Select cast: (q to quit)")
-        for i, p in enumerate(podcasts):
-            print(f"{i + 1}. {p}")
-        selected_cast = input("")
-        try:
-            if selected_cast == "q":
-                break
-            select_eps([podcasts[int(selected_cast) - 1]])
-        except Exception as e:
-            LOGGER.error(f"Invalid command: {e}.")
+class MAIN_MENU(Enum):
+    LIST_EPISODES = 1
+    BROWSE_PODCAST = 2
+    ADD_PODCAST = 3
+    FIND_PODCAST = 4
 
 
-def episode_action() -> EPISODE_ACTION | None:
-    while True:
-        act = (
-            input(
-                "What do you want to do?\n"
-                "1. Play episode\n"
-                "2. Download episode\n"
-                f"{exit_commands()}: "
+class PodcastMenu:
+    """CLI Menu for browsing, playing, and downloading podcast episodes."""
+
+    def __init__(self, feeds_file: Path, max_age: int = 30):
+        if not feeds_file.exists():
+            self._init_feeds(feeds_file)
+
+        self.reader = PodcastReader(feeds_file, max_age=max_age)
+
+    # ----------------------------
+    # Menu control
+    # ----------------------------
+
+    def run(self):
+        """Main menu loop."""
+        while True:
+            action = await_user_input(
+                MAIN_MENU,
+                prompt="What do you want to do?",
+                exit_values=EXIT_COMMANDS,
             )
-            .strip()
-            .lower()
+
+            if action is None:
+                break
+
+            match action:
+                case MAIN_MENU.LIST_EPISODES:
+                    self._list_all_episodes()
+                case MAIN_MENU.BROWSE_PODCAST:
+                    self._browse_podcasts()
+                case MAIN_MENU.ADD_PODCAST:
+                    self._add_podcast()
+                case MAIN_MENU.FIND_PODCAST:
+                    self._search_podbean()
+                case _:
+                    LOGGER.error("Invalid command.")
+
+    # ----------------------------
+    # Menu actions
+    # ----------------------------
+
+    def _list_all_episodes(self):
+        """Display all episodes from all podcasts."""
+        episodes = []
+        for podcast in self.reader.podcasts:
+            episodes.extend(podcast.episodes)
+
+        episodes.sort(key=lambda ep: ep.date, reverse=True)
+
+        while True:
+            print("\n--- Episodes ---")
+            for i, ep in enumerate(episodes, start=1):
+                print(f"{i}. {ep}")
+
+            selection = (
+                input(f"Episode number to open {exit_commands()}: ").strip().lower()
+            )
+
+            if selection in EXIT_COMMANDS:
+                break
+
+            if not selection.isdigit():
+                print("Please enter a valid number.")
+                continue
+
+            idx = int(selection) - 1
+            if idx < 0 or idx >= len(episodes):
+                print("Invalid episode number.")
+                continue
+
+            episode = episodes[idx]
+            self._handle_episode_action(episode)
+
+    def _browse_podcasts(self):
+        """Select a podcast and browse its episodes."""
+        podcasts = self.reader.podcasts
+        while True:
+            print("\n--- Podcasts ---")
+            for i, p in enumerate(podcasts, start=1):
+                print(f"{i}. {p}")
+
+            selection = input(f"Select podcast {exit_commands()}: ").strip().lower()
+            if selection in EXIT_COMMANDS:
+                break
+
+            if not selection.isdigit():
+                print("Please enter a valid number.")
+                continue
+
+            idx = int(selection) - 1
+            if idx < 0 or idx >= len(podcasts):
+                print("Invalid podcast number.")
+                continue
+
+            podcast = podcasts[idx]
+            self._list_podcast_episodes(podcast)
+
+    def _list_podcast_episodes(self, podcast: Podcast):
+        """List episodes for a single podcast."""
+        while True:
+            print(f"\n--- {podcast.title} ---")
+            for i, ep in enumerate(podcast.episodes, start=1):
+                print(f"{i}. {ep}")
+
+            selection = (
+                input(f"Episode number to open {exit_commands()}: ").strip().lower()
+            )
+            if selection in EXIT_COMMANDS:
+                break
+
+            if not selection.isdigit():
+                print("Please enter a valid number.")
+                continue
+
+            idx = int(selection) - 1
+            if idx < 0 or idx >= len(podcast.episodes):
+                print("Invalid episode number.")
+                continue
+
+            episode = podcast.episodes[idx]
+            self._handle_episode_action(episode)
+
+    def _handle_episode_action(self, episode: Episode):
+        """Ask the user what to do with the selected episode."""
+
+        action = await_user_input(
+            EPISODE_ACTION,
+            prompt="What do you want to do with this episode?",
+            exit_values=EXIT_COMMANDS,
         )
 
-        if act in EXIT_COMMANDS:
-            break
+        if action is None:
+            return
 
-        if act == "1":
-            return EPISODE_ACTION.PLAY
-        elif act == "2":
-            return EPISODE_ACTION.DOWNLOAD
-        else:
-            print("Invalid option.")
+        match action:
+            case EPISODE_ACTION.PLAY:
+                if not episode.link:
+                    LOGGER.warning("Episode has no playable link.")
+                    return
+                LOGGER.info(f"Opening {episode.link}")
+                webbrowser.open(episode.link)
+            case EPISODE_ACTION.DOWNLOAD:
+                self._download_episode(episode)
+
+    def _download_episode(self, episode: Episode):
+        """Download the given episode."""
+        download_dir = Path("./download")
+        download_dir.mkdir(exist_ok=True)
+
+        if not episode.link:
+            LOGGER.warning("Cannot download — episode has no link.")
+            return
+
+        LOGGER.info(f"Downloading {episode.link}")
+        downloaded_file = episode.download(to=download_dir)
+        LOGGER.info(f"Downloaded episode to '{downloaded_file}'")
+
+    def _add_podcast(self):
+        """Add a new podcast feed."""
+        name = input("Podcast name: ").strip()
+        url = input("Feed URL: ").strip()
+
+        if not name or not url:
+            LOGGER.warning("Both name and URL are required.")
+            return
+
+        self.reader.add_feed(name, url)
+        LOGGER.info(f"Added new feed: {name}")
+
+    def _search_podbean(self):
+        """Search for a podcast on Podbean."""
+        name = input("Search term: ").strip()
+        if not name:
+            LOGGER.warning("Search term cannot be empty.")
+            return
+
+        query = urllib.parse.quote(name)
+        url = f"https://www.podbean.com/site/search/index?v={query}"
+        LOGGER.info(f"Opening Podbean search for '{name}'")
+        webbrowser.open(url)
+
+    # ----------------------------
+    # Helpers
+    # ----------------------------
+
+    def _init_feeds(self, path: Path):
+        """Initialize a new feeds file with a template."""
+        with path.open("wt") as f:
+            f.write("# Enter your podcasts here in name, url format\n")
+        LOGGER.info(f"Initialized new feeds file at {path}")
 
 
-def select_eps(podcasts: list[Podcast]):
-    all_eps = []
-    for p in podcasts:
-        all_eps.extend(p.episodes)
-    selected_ep = None
-    all_eps.sort(key=lambda x: x.date, reverse=True)
-
-    while selected_ep not in EXIT_COMMANDS:
-        for i, ep in enumerate(all_eps):
-            print(f"{i + 1}. {ep}")
-        selected_ep = input(f"Episode nr to open {exit_commands()}: ")
-
-        if selected_ep in EXIT_COMMANDS:
-            break
-
-        toplay: Episode = all_eps[int(selected_ep) - 1]
-        a = episode_action()
-        if a == EPISODE_ACTION.PLAY:
-            webbrowser.open(toplay.link)
-            LOGGER.info(f"Opening {toplay.link}")
-        elif a == EPISODE_ACTION.DOWNLOAD:
-            LOGGER.info(f"Downloading {toplay.link}")
-            downloaded_file = toplay.download(to=Path("./download/"))
-            LOGGER.info(f"Downloaded episode to '{downloaded_file}'")
+# ----------------------------
+# Entry point
+# ----------------------------
 
 
 def parse_args():
-    argparser = argparse.ArgumentParser("CLI-Podcast browser")
-    argparser.add_argument(
+    parser = argparse.ArgumentParser("CLI-Podcast browser")
+    parser.add_argument(
         "feeds",
         type=Path,
         default=Path("./feeds.txt"),
         nargs="?",
         help="Path to the feeds file (default: ./feeds.txt)",
     )
-    argparser.add_argument(
+    parser.add_argument(
         "--max-age",
         metavar="m",
         dest="max_age",
@@ -100,46 +238,13 @@ def parse_args():
         default=30,
         help="Maximum age in days (default: 30)",
     )
-
-    return argparser.parse_args()
-
-
-def init_feeds(p: Path):
-    with p.open("wt") as f:
-        f.write("# Enter your podcasts here in name, url format\n")
+    return parser.parse_args()
 
 
 def main():
     args = parse_args()
-
-    if not args.feeds.exists():
-        init_feeds(args.feeds)
-
-    max_age = args.max_age
-    pr = PodcastReader(args.feeds, max_age=max_age)
-    while True:
-        choice = input(
-            f">1. List episodes, \n>2. browse podcast \n>3. Add new podcast. \n>4. Find new cast on podbean.\nEnter {exit_commands()} to stop\n"
-        )
-        try:
-            if choice in EXIT_COMMANDS:
-                sys.exit()
-            choice = int(choice)
-        except ValueError:
-            LOGGER.error("Invalid command.")
-        if choice == 1:
-            select_eps(pr.podcasts)
-        elif choice == 2:
-            select_cast(pr.podcasts)
-        elif choice == 3:
-            name = input("Name: ")
-            url = input("Url: ")
-            pr.add_feed(name, url)
-        elif choice == 4:
-            name = input("Name: ")
-            query = urllib.parse.quote(name)
-            url = f"https://www.podbean.com/site/search/index?v={query}"
-            webbrowser.open(url)
+    menu = PodcastMenu(args.feeds, args.max_age)
+    menu.run()
 
 
 if __name__ == "__main__":
