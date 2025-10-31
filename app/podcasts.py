@@ -42,9 +42,14 @@ class Episode:
     def __str__(self):
         return f"{datetime.datetime.strftime(self.date, '%d-%b-%Y %H:%M')}. {self.channel}: {self.title}"
 
+    @property
+    def safe_file_out_name(self):
+        name = f"{datetime.datetime.strftime(self.date, '%Y-%m-%d')}-{self.channel}-{self.title}"
+        return re.sub(r"[!@#$%^&*?|:\\/]", "", name)
+
     def download(self, to: Path) -> Path:
         to.mkdir(exist_ok=True, parents=True)
-        safe_title = re.sub(r"[!@#$%^&*?|:\\/]", "", self.title)
+        safe_title = self.safe_file_out_name
         file_out = (to / safe_title).with_suffix(".mp3")
         if file_out.exists():
             return file_out
