@@ -2,7 +2,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import datetime
 from dateutil import parser
 
@@ -18,6 +18,16 @@ dateformats = [
 ]
 
 
+COLORS = [
+    "\033[95m",
+    "\033[94m",
+    "\033[96m",
+    "\033[92m",
+    "\033[93m",
+    "\033[91m",
+]
+
+
 @dataclass
 class Episode:
     title: str
@@ -26,6 +36,7 @@ class Episode:
     channel: str
     description: str = ""
     author: str = ""
+    color: str = field(default="")
 
     def __post_init__(self):
         question_mark_idx = self.link.find("?")
@@ -38,6 +49,9 @@ class Episode:
             LOGGER.error(f"Cannot parse: {self.date}.")
         except Exception as e:
             print(e)
+
+    def set_color(self, s: str):
+        self.color = s
 
     def __str__(self):
         return f"{datetime.datetime.strftime(self.date, '%d-%b-%Y %H:%M')}. {self.channel}: {self.title}"
@@ -70,15 +84,34 @@ class Episode:
         )
 
 
+# List of standard ANSI colors (foreground)
+COLORS = [30, 31, 32, 33, 34, 35, 36, 90, 91, 92, 93, 94, 95, 96]
+
+
+def color_from_text(text: str) -> str:
+    """Generate a deterministic color from a string."""
+    # Use a hash of the text, then modulo the number of colors
+    h = int(hashlib.sha256(text.encode()).hexdigest(), 16)
+    color_code = COLORS[h % len(COLORS)]
+    return f"\033[{color_code}m"
+
+
 @dataclass
 class Podcast:
     title: str
-    episodes: list[Episode]
+    episodes: list[Episode] = field(default_factory=list)
     description: str = ""
     link: str = ""
+    color: str = field(init=False)
+
+    def __post_init__(self):
+        # Assign a deterministic color to the podcast
+        self.color = color_from_text(self.title)
+        for e in self.episodes:
+            e.set_color(self.color)
 
     def __str__(self):
-        return f"{self.title}; {len(self.episodes)} episode(s)."
+        return f"{self.color}{self.title}; {len(self.episodes)} episode(s)."
 
     def list_last(self, n=5):
         for i in range(n):

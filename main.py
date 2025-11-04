@@ -75,7 +75,8 @@ class PodcastMenu:
         while True:
             print("\n--- Episodes ---")
             for i, ep in enumerate(episodes, start=1):
-                print(f"{i}. {ep}")
+                print(f"{ep.color}{i}. {ep}")
+                print("\033[0m", end="")
 
             selection = (
                 input(f"Episode number to open {exit_commands()}: ").strip().lower()
@@ -103,6 +104,7 @@ class PodcastMenu:
             print("\n--- Podcasts ---")
             for i, p in enumerate(podcasts, start=1):
                 print(f"{i}. {p}")
+                print("\033[0m", end="")
 
             selection = input(f"Select podcast {exit_commands()}: ").strip().lower()
             if selection in EXIT_COMMANDS:
@@ -244,6 +246,7 @@ def main():
     args = parse_args()
     menu = PodcastMenu(args.feeds, args.max_age)
     menu.run()
+    print("\033[0m")
 
 
 if __name__ == "__main__":
