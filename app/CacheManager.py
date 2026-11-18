@@ -1,14 +1,12 @@
 import datetime
 import os
-from pathlib import Path
-from typing import Optional
-
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
 class CacheFileData:
-    filename: str
+    filename: Path
     data: str | bytes
     timestamp: str
 
@@ -21,7 +19,7 @@ class CacheManager:
         self.cache.mkdir(parents=True, exist_ok=True)
 
     def write(
-        self, filename: str, data: bytes, timestamp: Optional[datetime.datetime] = None
+        self, filename: str, data: bytes, timestamp: datetime.datetime | None
     ) -> bool:
         """Write data to cache with an optional timestamp.
 
@@ -101,7 +99,7 @@ class CacheManager:
         current_time = datetime.datetime.now()
         return (current_time - timestamp).total_seconds() > self.FILE_LIFETIME
 
-    def clear(self, filename: Optional[str] = None) -> bool:
+    def clear(self, filename: str | None) -> bool:
         """Clear cache entry or entire cache.
 
         Args:

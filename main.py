@@ -1,14 +1,15 @@
 import argparse
-import urllib
 import webbrowser
 from enum import Enum
 from pathlib import Path
 
+import requests
 
+from app import LOGGER
 from app.exit_commands import EXIT_COMMANDS, exit_commands
 from app.podcasts import Episode, Podcast, PodcastReader
-from app import LOGGER
 from app.user_input import await_user_input
+from rss import SearchResult, parse_rss_search
 
 
 class EPISODE_ACTION(Enum):
@@ -56,7 +57,7 @@ class PodcastMenu:
                 case MAIN_MENU.ADD_PODCAST:
                     self._add_podcast()
                 case MAIN_MENU.FIND_PODCAST:
-                    self._search_podbean()
+                    self._search_rss()
                 case _:
                     LOGGER.error("Invalid command.")
 
@@ -194,17 +195,58 @@ class PodcastMenu:
         self.reader.add_feed(name, url)
         LOGGER.info(f"Added new feed: {name}")
 
-    def _search_podbean(self):
+    # def _search_podbean(self):
+    #     """Search for a podcast on Podbean."""
+    #     name = input("Search term: ").strip()
+    #     if not name:
+    #         LOGGER.warning("Search term cannot be empty.")
+    #         return
+
+    #     query = urllib.parse.quote(name)
+    #     url = f"https://www.podbean.com/site/search/index?v={query}"
+    #     LOGGER.info(f"Opening Podbean search for '{name}'")
+    #     webbrowser.open(url)
+
+    def _search_rss(self):
         """Search for a podcast on Podbean."""
         name = input("Search term: ").strip()
         if not name:
             LOGGER.warning("Search term cannot be empty.")
             return
+        searchresult: SearchResult
+        if self.reader.cache.read(name):
+            searchresult = parse_rss_search(self.reader.cache.read(name).data)
+        else:
+            r = requests.post(
+                "https://apollo.rss.com/search/podcast-index/byterm",
+                headers={"referer": "https://rss.com/", "origin": "https://rss.com"},
+                data={"q": name},
+            )
+            r.raise_for_status()
+            self.reader.cache.write(name, r.content)
+            searchresult = parse_rss_search(r.content)
 
-        query = urllib.parse.quote(name)
-        url = f"https://www.podbean.com/site/search/index?v={query}"
-        LOGGER.info(f"Opening Podbean search for '{name}'")
-        webbrowser.open(url)
+        searchresult.list_feeds()
+        while True:
+            selection = (
+                input(f"Enter podcast id to subscribe to:\n{exit_commands()}: ")
+                .strip()
+                .lower()
+            )
+            if selection in EXIT_COMMANDS:
+                break
+
+            if not selection.isdigit():
+                print("Please enter a valid number.")
+                continue
+
+            idx = int(selection) - 1
+            if idx < 0 or idx >= len(searchresult.feeds):
+                print("Invalid podcast number.")
+                continue
+            add = searchresult.feeds[idx]
+            self.reader.add_feed(add.title, add.originalUrl)
+            break
 
     # ----------------------------
     # Helpers

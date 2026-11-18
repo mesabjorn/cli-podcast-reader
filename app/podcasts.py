@@ -1,16 +1,17 @@
+import datetime
 import hashlib
 import os
-from pathlib import Path
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-import datetime
+from pathlib import Path
+
+import pytz
+import requests
 from dateutil import parser
 
-import requests
-import xml.etree.ElementTree as ET
-import pytz
-
-from app import LOGGER, CacheManager
+from app import LOGGER
+from app.cachemanager import CacheManager
 
 dateformats = [
     "%a, %d %b %Y %H:%M:%S %z",
@@ -126,13 +127,11 @@ class Line:
 
 
 class PodcastReader:
-    cache: CacheManager
-
-    def __init__(self, feedsfile: str, max_age=30, cache_path=Path(".cache")):
+    def __init__(self, feedsfile: Path, max_age=30, cache_path=Path(".cache")):
         self.max_age = max_age
         self.feedsfile = feedsfile
         self.podcasts = []
-        self.cache = CacheManager.CacheManager(cache_path)
+        self.cache: CacheManager = CacheManager(cache_path)
         self.read_feeds()
 
     def read_feeds(self):
