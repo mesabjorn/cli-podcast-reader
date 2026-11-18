@@ -103,6 +103,7 @@ class Podcast:
     episodes: list[Episode] = field(default_factory=list)
     description: str = ""
     link: str = ""
+    feed_url: str = ""
     color: str = field(init=False)
 
     def __post_init__(self):
@@ -157,6 +158,7 @@ class PodcastReader:
 
                 xml_data = self.get_xml_data(entry.url)
                 podcast = self.read_xml_data(xml_data)
+                podcast.feed_url = entry.url
                 results.append(podcast)
             except Exception as e:
                 clean_feed = re.sub(r"[\/\\:\-\.=?]", "", entry.name)
@@ -234,3 +236,26 @@ class PodcastReader:
         with open(self.feedsfile, "a+") as f:
             f.write(f"{name};{url}\n")
         self.read_feeds()
+
+    def remove_feed(self, url: str) -> bool:
+        """Remove a podcast feed by URL from the feeds file."""
+        if not self.feedsfile.exists():
+            return False
+
+        removed = False
+        with open(self.feedsfile, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        with open(self.feedsfile, "w", encoding="utf-8") as f:
+            for line in lines:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and ";" in stripped:
+                    _, feed_url = [x.strip() for x in stripped.split(";", 1)]
+                    if feed_url == url:
+                        removed = True
+                        continue
+                f.write(line)
+
+        if removed:
+            self.read_feeds()
+        return removed

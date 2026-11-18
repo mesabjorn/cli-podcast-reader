@@ -21,7 +21,8 @@ class MAIN_MENU(Enum):
     LIST_EPISODES = 1
     BROWSE_PODCAST = 2
     ADD_PODCAST = 3
-    FIND_PODCAST = 4
+    REMOVE_PODCAST = 4
+    FIND_PODCAST = 5
 
 
 class PodcastMenu:
@@ -56,6 +57,8 @@ class PodcastMenu:
                     self._browse_podcasts()
                 case MAIN_MENU.ADD_PODCAST:
                     self._add_podcast()
+                case MAIN_MENU.REMOVE_PODCAST:
+                    self._remove_podcast()
                 case MAIN_MENU.FIND_PODCAST:
                     self._search_rss()
                 case _:
@@ -194,6 +197,36 @@ class PodcastMenu:
 
         self.reader.add_feed(name, url)
         LOGGER.info(f"Added new feed: {name}")
+
+    def _remove_podcast(self):
+        """Remove a podcast feed."""
+        podcasts = self.reader.podcasts
+        if not podcasts:
+            LOGGER.warning("No podcasts to remove.")
+            return
+
+        print("\n--- Remove Podcast ---")
+        for i, p in enumerate(podcasts, start=1):
+            print(f"{i}. {p.title} ({p.feed_url})")
+
+        selection = input(f"Select podcast to remove {exit_commands()}: ").strip().lower()
+        if selection in EXIT_COMMANDS:
+            return
+
+        if not selection.isdigit():
+            print("Please enter a valid number.")
+            return
+
+        idx = int(selection) - 1
+        if idx < 0 or idx >= len(podcasts):
+            print("Invalid podcast number.")
+            return
+
+        podcast = podcasts[idx]
+        if self.reader.remove_feed(podcast.feed_url):
+            LOGGER.info(f"Removed feed: {podcast.title}")
+        else:
+            LOGGER.warning(f"Could not remove feed: {podcast.title}")
 
     # def _search_podbean(self):
     #     """Search for a podcast on Podbean."""
